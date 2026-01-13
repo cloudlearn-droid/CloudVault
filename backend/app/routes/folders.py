@@ -22,6 +22,27 @@ def get_db():
 
 
 # -------------------------
+# LIST folders (My Drive)
+# -------------------------
+@router.get("")
+def list_folders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    List all non-deleted folders
+    belonging to the logged-in user.
+    """
+
+    folders = db.query(Folder).filter(
+        Folder.owner_id == current_user.id,
+        Folder.is_deleted == False
+    ).order_by(Folder.id.desc()).all()
+
+    return folders
+
+
+# -------------------------
 # Create a new folder
 # -------------------------
 @router.post("")
