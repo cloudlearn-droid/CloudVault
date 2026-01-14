@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.core.database import SessionLocal
 from app.core.deps import get_current_user
@@ -22,23 +23,32 @@ def get_db():
 
 
 # -------------------------
-# LIST folders (My Drive)
+# LIST folders (My Drive / Subfolders) ✅ FIXED
 # -------------------------
 @router.get("")
 def list_folders(
+    parent_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
-    List all non-deleted folders
-    belonging to the logged-in user.
+    List folders for the logged-in user.
+
+    - If parent_id is NULL → return root folders only
+    - If parent_id is provided → return only its direct children
     """
 
-    folders = db.query(Folder).filter(
+    query = db.query(Folder).filter(
         Folder.owner_id == current_user.id,
-        Folder.is_deleted == False
-    ).order_by(Folder.id.desc()).all()
+        Folder.is_deleted == False,
+    )
 
+    if parent_id is None:
+        query = query.filter(Folder.parent_id.is_(None))
+    else:
+        query = query.filter(Folder.parent_id == parent_id)
+
+    folders = query.order_by(Folder.id.desc()).all()
     return folders
 
 
@@ -49,7 +59,7 @@ def list_folders(
 def create_folder(
     data: FolderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create a folder for the logged-in user.
@@ -59,7 +69,7 @@ def create_folder(
     folder = Folder(
         name=data.name,
         parent_id=data.parent_id,
-        owner_id=current_user.id
+        owner_id=current_user.id,
     )
 
     db.add(folder)
@@ -76,7 +86,7 @@ def create_folder(
 def get_folder(
     folder_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Fetch a folder only if:
@@ -87,7 +97,7 @@ def get_folder(
     folder = db.query(Folder).filter(
         Folder.id == folder_id,
         Folder.owner_id == current_user.id,
-        Folder.is_deleted == False
+        Folder.is_deleted == False,
     ).first()
 
     if not folder:
@@ -103,7 +113,7 @@ def get_folder(
 def delete_folder(
     folder_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Soft delete a folder.
@@ -112,7 +122,7 @@ def delete_folder(
 
     folder = db.query(Folder).filter(
         Folder.id == folder_id,
-        Folder.owner_id == current_user.id
+        Folder.owner_id == current_user.id,
     ).first()
 
     if not folder:

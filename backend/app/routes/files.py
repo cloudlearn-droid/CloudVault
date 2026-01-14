@@ -1,4 +1,11 @@
-from fastapi import APIRouter, Depends, UploadFile, File as FastFile, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    UploadFile,
+    File as FastFile,
+    HTTPException,
+    Query,           # ✅ REQUIRED IMPORT (THIS WAS MISSING)
+)
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import uuid4
@@ -10,13 +17,17 @@ from app.core.database import SessionLocal
 from app.core.deps import get_current_user
 from app.models.file import File
 from app.models.user import User
-from app.schemas.file import FileOut  # ✅ already exists
+from app.schemas.file import FileOut
+
 
 # --------------------
 # Supabase (SERVER SIDE)
 # --------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError("Supabase env vars missing")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -35,16 +46,17 @@ def get_db():
 
 
 # --------------------
-# GET FILES (✅ FIX)
+# GET FILES
 # --------------------
 @router.get("", response_model=List[FileOut])
 def get_files(
-    folder_id: Optional[int] = None,
+    folder_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Return uploaded files for logged-in user
+    Return uploaded files for logged-in user.
+    If folder_id is null → root files only
     """
     query = db.query(File).filter(
         File.owner_id == current_user.id,
@@ -54,17 +66,19 @@ def get_files(
 
     if folder_id is not None:
         query = query.filter(File.folder_id == folder_id)
+    else:
+        query = query.filter(File.folder_id == None)
 
     return query.order_by(File.created_at.desc()).all()
 
 
 # --------------------
-# UPLOAD FILE (FINAL — Architecture B)
+# UPLOAD FILE (Architecture B — FINAL)
 # --------------------
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = FastFile(...),
-    folder_id: Optional[int] = None,
+    folder_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
