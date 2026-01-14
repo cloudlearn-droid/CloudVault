@@ -3,35 +3,33 @@ import { useState } from "react";
 export default function FileUpload({ folderId, onUploaded }) {
   const [uploading, setUploading] = useState(false);
 
-  const handleFileChange = async (e) => {
+  const handleChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     try {
       setUploading(true);
 
-      const token = localStorage.getItem("token");
-
       const formData = new FormData();
       formData.append("file", file);
-      if (folderId !== null) {
-        formData.append("folder_id", folderId);
-      }
 
-      const res = await fetch("http://127.0.0.1:8000/files/upload", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
+      const token = localStorage.getItem("token");
 
-      alert("Upload successful");
-      onUploaded?.();
-      
+      const res = await fetch(
+        `http://127.0.0.1:8000/files/upload${
+          folderId ? `?folder_id=${folderId}` : ""
+        }`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text);
+        throw new Error("Upload failed");
       }
 
       onUploaded?.();
@@ -46,7 +44,11 @@ export default function FileUpload({ folderId, onUploaded }) {
 
   return (
     <div className="my-4">
-      <input type="file" disabled={uploading} onChange={handleFileChange} />
+      <input
+        type="file"
+        disabled={uploading}
+        onChange={handleChange}
+      />
       {uploading && (
         <div className="text-sm text-gray-500 mt-2">
           Uploading…

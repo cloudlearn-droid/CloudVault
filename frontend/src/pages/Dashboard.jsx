@@ -17,18 +17,19 @@ export default function Dashboard() {
   const [folders, setFolders] = useState([]);
   const [files, setFiles] = useState([]);
   const [currentFolder, setCurrentFolder] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [breadcrumb, setBreadcrumb] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   // -------------------------
   // Load folders
   // -------------------------
   const loadFolders = async (parentId = null) => {
-    setLoading(true);
     try {
       const data = await apiGetFolders(parentId);
       setFolders(data);
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error("Folder load failed:", e.message);
+      setFolders([]);
     }
   };
 
@@ -36,12 +37,22 @@ export default function Dashboard() {
   // Load files
   // -------------------------
   const loadFiles = async (folderId = null) => {
-    const data = await apiGetFiles(folderId);
-    setFiles(data);
+    try {
+      const data = await apiGetFiles(folderId);
+      setFiles(data);
+    } catch (e) {
+      console.error("File load failed:", e.message);
+      setFiles([]);
+    }
   };
 
-  // Initial load
+  // -------------------------
+  // Initial load (TOKEN SAFE)
+  // -------------------------
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
     loadFolders(null);
     loadFiles(null);
   }, []);
@@ -59,8 +70,28 @@ export default function Dashboard() {
   // -------------------------
   const handleOpenFolder = (folder) => {
     setCurrentFolder(folder);
+
+    setBreadcrumb((prev) => {
+      const index = prev.findIndex((f) => f.id === folder.id);
+      if (index !== -1) return prev.slice(0, index + 1);
+      return [...prev, folder];
+    });
+
     loadFolders(folder.id);
     loadFiles(folder.id);
+  };
+
+  // -------------------------
+  // Breadcrumb click
+  // -------------------------
+  const handleBreadcrumbClick = (index) => {
+    const path = breadcrumb.slice(0, index + 1);
+    const target = path[path.length - 1];
+
+    setBreadcrumb(path);
+    setCurrentFolder(target);
+    loadFolders(target.id);
+    loadFiles(target.id);
   };
 
   // -------------------------
@@ -68,13 +99,13 @@ export default function Dashboard() {
   // -------------------------
   const handleGoRoot = () => {
     setCurrentFolder(null);
+    setBreadcrumb([]);
     loadFolders(null);
     loadFiles(null);
   };
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
       <aside className="w-64 bg-white border-r p-4">
         <h2 className="text-xl font-bold mb-6">CloudVault</h2>
 
@@ -85,8 +116,6 @@ export default function Dashboard() {
           >
             My Drive
           </div>
-          <div className="text-gray-500">Shared</div>
-          <div className="text-gray-500">Trash</div>
         </nav>
 
         <button
@@ -97,47 +126,44 @@ export default function Dashboard() {
         </button>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 p-6 overflow-auto">
-        {/* Breadcrumb (UNCHANGED) */}
+        {/* Breadcrumb */}
         <div className="text-sm text-gray-500 mb-4">
-          {currentFolder ? (
-            <>
+          <span
+            className="cursor-pointer text-blue-600"
+            onClick={handleGoRoot}
+          >
+            My Drive
+          </span>
+
+          {breadcrumb.map((folder, index) => (
+            <span key={folder.id}>
+              {" / "}
               <span
                 className="cursor-pointer text-blue-600"
-                onClick={handleGoRoot}
+                onClick={() => handleBreadcrumbClick(index)}
               >
-                My Drive
+                {folder.name}
               </span>
-              {" / "}
-              <span className="font-medium">{currentFolder.name}</span>
-            </>
-          ) : (
-            <span className="font-medium">My Drive</span>
-          )}
+            </span>
+          ))}
         </div>
 
         <CreateFolder onCreate={handleCreateFolder} />
 
         <FileUpload
           folderId={currentFolder?.id || null}
-          onUploaded={() => loadFiles(currentFolder?.id || null)}
+          onUploaded={() =>
+            loadFiles(currentFolder?.id || null)
+          }
         />
 
-        {loading ? (
-          <div className="text-gray-500 mt-4">Loading folders…</div>
-        ) : (
-          <FolderList
-            folders={folders}
-            onOpenFolder={handleOpenFolder}
-          />
-        )}
-
-        {/* ✅ FILE LIST — FIXED */}
-        <FileList
-          folderId={currentFolder?.id || null}
-          files={files}
+        <FolderList
+          folders={folders}
+          onOpenFolder={handleOpenFolder}
         />
+
+        <FileList files={files} />
       </main>
     </div>
   );
