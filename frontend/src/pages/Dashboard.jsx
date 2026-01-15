@@ -4,6 +4,8 @@ import {
   apiGetFolders,
   apiCreateFolder,
   apiGetFiles,
+  apiDownloadFile,
+  apiDownloadFileBlob,
 } from "../services/api";
 
 import FolderList from "../components/FolderList";
@@ -18,18 +20,19 @@ export default function Dashboard() {
   const [files, setFiles] = useState([]);
   const [currentFolder, setCurrentFolder] = useState(null);
   const [breadcrumb, setBreadcrumb] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingFolders, setLoadingFolders] = useState(true);
+  const [loadingFiles, setLoadingFiles] = useState(true);
 
   // -------------------------
   // Load folders
   // -------------------------
   const loadFolders = async (parentId = null) => {
+    setLoadingFolders(true);
     try {
       const data = await apiGetFolders(parentId);
       setFolders(data);
-    } catch (e) {
-      console.error("Folder load failed:", e.message);
-      setFolders([]);
+    } finally {
+      setLoadingFolders(false);
     }
   };
 
@@ -37,22 +40,17 @@ export default function Dashboard() {
   // Load files
   // -------------------------
   const loadFiles = async (folderId = null) => {
+    setLoadingFiles(true);
     try {
       const data = await apiGetFiles(folderId);
       setFiles(data);
-    } catch (e) {
-      console.error("File load failed:", e.message);
-      setFiles([]);
+    } finally {
+      setLoadingFiles(false);
     }
   };
 
-  // -------------------------
-  // Initial load (TOKEN SAFE)
-  // -------------------------
+  // Initial load (My Drive)
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
     loadFolders(null);
     loadFiles(null);
   }, []);
@@ -82,7 +80,7 @@ export default function Dashboard() {
   };
 
   // -------------------------
-  // Breadcrumb click
+  // Breadcrumb navigation
   // -------------------------
   const handleBreadcrumbClick = (index) => {
     const path = breadcrumb.slice(0, index + 1);
@@ -104,8 +102,40 @@ export default function Dashboard() {
     loadFiles(null);
   };
 
+  // -------------------------
+  // PREVIEW (OLD, WORKING LOGIC) ✅
+  // -------------------------
+  const handlePreview = async (file) => {
+    const res = await apiDownloadFile(file.id);
+    window.open(res.download_url, "_blank", "noopener,noreferrer");
+  };
+
+  // -------------------------
+  // DOWNLOAD (FORCE DOWNLOAD) ✅
+  // -------------------------
+  const handleDownload = async (file) => {
+    const blob = await apiDownloadFileBlob(file.id);
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Inject handlers into files
+  const filesWithActions = files.map((f) => ({
+    ...f,
+    onDownload: handleDownload,
+    onPreview: handlePreview,
+  }));
+
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* Sidebar */}
       <aside className="w-64 bg-white border-r p-4">
         <h2 className="text-xl font-bold mb-6">CloudVault</h2>
 
@@ -126,6 +156,7 @@ export default function Dashboard() {
         </button>
       </aside>
 
+      {/* Main */}
       <main className="flex-1 p-6 overflow-auto">
         {/* Breadcrumb */}
         <div className="text-sm text-gray-500 mb-4">
@@ -153,17 +184,23 @@ export default function Dashboard() {
 
         <FileUpload
           folderId={currentFolder?.id || null}
-          onUploaded={() =>
-            loadFiles(currentFolder?.id || null)
-          }
+          onUploaded={() => loadFiles(currentFolder?.id || null)}
         />
 
-        <FolderList
-          folders={folders}
-          onOpenFolder={handleOpenFolder}
-        />
+        {loadingFolders ? (
+          <div className="text-gray-500 mt-4">Loading folders…</div>
+        ) : (
+          <FolderList
+            folders={folders}
+            onOpenFolder={handleOpenFolder}
+          />
+        )}
 
-        <FileList files={files} />
+        {loadingFiles ? (
+          <div className="text-gray-500 mt-6">Loading files…</div>
+        ) : (
+          <FileList files={filesWithActions} />
+        )}
       </main>
     </div>
   );

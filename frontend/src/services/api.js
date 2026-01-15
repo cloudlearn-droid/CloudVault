@@ -85,3 +85,28 @@ export async function apiUploadFile(file, folder_id = null) {
     body: formData,
   });
 }
+// --------------------
+// DOWNLOAD FILE
+// --------------------
+export async function apiDownloadFile(fileId) {
+  return fetchWithAuth(`/files/${fileId}/download`);
+}
+export async function apiDownloadFileBlob(fileId) {
+  const token = localStorage.getItem("token");
+
+  const response = await fetch(
+    `http://127.0.0.1:8000/files/${fileId}/download`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Download failed");
+  }
+
+  const blob = await response.blob();
+  return blob;
+}
