@@ -1,3 +1,5 @@
+from datetime import timedelta
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import (
     APIRouter,
     Depends,
@@ -123,4 +125,44 @@ async def upload_file(
         "id": db_file.id,
         "name": db_file.name,
         "storage_path": storage_path,
+    }
+
+
+# keep existing imports
+# keep existing router, supabase client, get_db, upload, list, etc.
+
+
+@router.get("/{file_id}/download")
+def download_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a signed download URL for a file
+    """
+
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.owner_id == current_user.id,
+        File.is_deleted == False,
+        File.is_uploaded == True,
+    ).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Signed URL valid for 5 minutes
+    res = supabase.storage.from_("files").create_signed_url(
+        file.storage_path,
+        expires_in=300,
+    )
+
+    if not res or "signedURL" not in res:
+        raise HTTPException(
+            status_code=500, detail="Could not generate download URL")
+
+    return {
+        "download_url": res["signedURL"],
+        "filename": file.name,
     }
