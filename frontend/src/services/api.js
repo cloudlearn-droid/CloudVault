@@ -22,7 +22,7 @@ export async function apiLogin(email, password) {
 }
 
 // --------------------
-// AUTHENTICATED FETCH (JSON)
+// AUTHENTICATED FETCH
 // --------------------
 export async function fetchWithAuth(endpoint, options = {}) {
   const token = getToken();
@@ -45,7 +45,7 @@ export async function fetchWithAuth(endpoint, options = {}) {
 }
 
 // --------------------
-// FOLDERS
+// FOLDERS ✅ RESTORED
 // --------------------
 export function apiGetFolders(parentId = null) {
   const query = parentId === null ? "" : `?parent_id=${parentId}`;
@@ -68,6 +68,16 @@ export function apiGetFiles(folder_id = null) {
   return fetchWithAuth(`/files${query}`);
 }
 
+export function apiGetTrashFiles() {
+  return fetchWithAuth("/files/trash");
+}
+
+export function apiRestoreFile(fileId) {
+  return fetchWithAuth(`/files/${fileId}/restore`, {
+    method: "POST",
+  });
+}
+
 export async function apiUploadFile(file, folder_id = null) {
   const formData = new FormData();
   formData.append("file", file);
@@ -88,7 +98,7 @@ export async function apiUploadFile(file, folder_id = null) {
 }
 
 // --------------------
-// DOWNLOAD / PREVIEW (BLOB – CORRECT)
+// DOWNLOAD / PREVIEW
 // --------------------
 export async function apiDownloadFileBlob(fileId) {
   const token = getToken();
@@ -111,6 +121,14 @@ export async function apiDownloadFileBlob(fileId) {
 // --------------------
 export function apiDeleteFile(fileId) {
   return fetchWithAuth(`/files/${fileId}`, {
+    method: "DELETE",
+  });
+}
+// --------------------
+// Permanent Delete File
+// --------------------
+export function apiPermanentDeleteFile(id) {  
+  return fetchWithAuth(`/files/${id}/permanent`, {
     method: "DELETE",
   });
 }

@@ -4,8 +4,11 @@ import {
   apiGetFolders,
   apiCreateFolder,
   apiGetFiles,
+  apiGetTrashFiles,
+  apiRestoreFile,
   apiDownloadFileBlob,
   apiDeleteFile,
+  apiPermanentDeleteFile,
 } from "../services/api";
 
 import FolderList from "../components/FolderList";
@@ -22,9 +25,10 @@ export default function Dashboard() {
   const [breadcrumb, setBreadcrumb] = useState([]);
   const [loadingFolders, setLoadingFolders] = useState(true);
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [view, setView] = useState("drive"); // drive | trash
 
   // -------------------------
-  // Load folders & files
+  // Load folders & files (ORIGINAL LOGIC RESTORED)
   // -------------------------
   const loadFolders = async (parentId = null) => {
     setLoadingFolders(true);
@@ -44,13 +48,22 @@ export default function Dashboard() {
     }
   };
 
+  const loadTrash = async () => {
+    setLoadingFiles(true);
+    try {
+      setFiles(await apiGetTrashFiles());
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
   useEffect(() => {
     loadFolders(null);
     loadFiles(null);
   }, []);
 
   // -------------------------
-  // Folder actions
+  // Folder actions (UNCHANGED)
   // -------------------------
   const handleCreateFolder = async (name) => {
     await apiCreateFolder(name, currentFolder?.id || null);
@@ -82,7 +95,7 @@ export default function Dashboard() {
   };
 
   // -------------------------
-  // FILE ACTIONS (FINAL, STABLE)
+  // File actions
   // -------------------------
   const handlePreview = async (file) => {
     const blob = await apiDownloadFileBlob(file.id);
@@ -110,11 +123,26 @@ export default function Dashboard() {
     loadFiles(currentFolder?.id || null);
   };
 
+  const handleRestore = async (file) => {
+    await apiRestoreFile(file.id);
+    loadTrash();
+  };
+
+  const handlePermanentDelete = async (file) => {
+    if (!window.confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) 
+      return;
+
+    await apiPermanentDeleteFile(file.id);
+    loadTrash();
+  };
+
   const filesWithActions = files.map((f) => ({
     ...f,
     onPreview: handlePreview,
     onDownload: handleDownload,
     onDelete: handleDelete,
+    onRestore: handleRestore,
+    onPermanentDelete: handlePermanentDelete,
   }));
 
   return (
@@ -123,8 +151,24 @@ export default function Dashboard() {
         <h2 className="text-xl font-bold mb-6">CloudVault</h2>
 
         <nav className="space-y-2 text-sm">
-          <div className="font-medium cursor-pointer" onClick={handleGoRoot}>
+          <div
+            className="font-medium cursor-pointer"
+            onClick={() => {
+              setView("drive");
+              handleGoRoot();
+            }}
+          >
             My Drive
+          </div>
+
+          <div
+            className="font-medium cursor-pointer text-red-600"
+            onClick={() => {
+              setView("trash");
+              loadTrash();
+            }}
+          >
+            Trash
           </div>
         </nav>
 
@@ -137,41 +181,51 @@ export default function Dashboard() {
       </aside>
 
       <main className="flex-1 p-6 overflow-auto">
-        <div className="text-sm text-gray-500 mb-4">
-          <span className="cursor-pointer text-blue-600" onClick={handleGoRoot}>
-            My Drive
-          </span>
-
-          {breadcrumb.map((folder, index) => (
-            <span key={folder.id}>
-              {" / "}
+        {view === "drive" && (
+          <>
+            <div className="text-sm text-gray-500 mb-4">
               <span
                 className="cursor-pointer text-blue-600"
-                onClick={() => handleBreadcrumbClick(index)}
+                onClick={handleGoRoot}
               >
-                {folder.name}
+                My Drive
               </span>
-            </span>
-          ))}
-        </div>
 
-        <CreateFolder onCreate={handleCreateFolder} />
+              {breadcrumb.map((folder, index) => (
+                <span key={folder.id}>
+                  {" / "}
+                  <span
+                    className="cursor-pointer text-blue-600"
+                    onClick={() => handleBreadcrumbClick(index)}
+                  >
+                    {folder.name}
+                  </span>
+                </span>
+              ))}
+            </div>
 
-        <FileUpload
-          folderId={currentFolder?.id || null}
-          onUploaded={() => loadFiles(currentFolder?.id || null)}
-        />
+            <CreateFolder onCreate={handleCreateFolder} />
 
-        {loadingFolders ? (
-          <div className="text-gray-500 mt-4">Loading folders…</div>
-        ) : (
-          <FolderList folders={folders} onOpenFolder={handleOpenFolder} />
+            <FileUpload
+              folderId={currentFolder?.id || null}
+              onUploaded={() => loadFiles(currentFolder?.id || null)}
+            />
+
+            {loadingFolders ? (
+              <div className="text-gray-500 mt-4">Loading folders…</div>
+            ) : (
+              <FolderList folders={folders} onOpenFolder={handleOpenFolder} />
+            )}
+          </>
         )}
 
         {loadingFiles ? (
           <div className="text-gray-500 mt-6">Loading files…</div>
         ) : (
-          <FileList files={filesWithActions} />
+          <FileList
+            files={filesWithActions}
+            isTrash={view === "trash"}
+          />
         )}
       </main>
     </div>
