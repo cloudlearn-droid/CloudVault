@@ -4,8 +4,8 @@ import {
   apiGetFolders,
   apiCreateFolder,
   apiGetFiles,
-  apiDownloadFile,
   apiDownloadFileBlob,
+  apiDeleteFile,
 } from "../services/api";
 
 import FolderList from "../components/FolderList";
@@ -24,64 +24,46 @@ export default function Dashboard() {
   const [loadingFiles, setLoadingFiles] = useState(true);
 
   // -------------------------
-  // Load folders
+  // Load folders & files
   // -------------------------
   const loadFolders = async (parentId = null) => {
     setLoadingFolders(true);
     try {
-      const data = await apiGetFolders(parentId);
-      setFolders(data);
+      setFolders(await apiGetFolders(parentId));
     } finally {
       setLoadingFolders(false);
     }
   };
 
-  // -------------------------
-  // Load files
-  // -------------------------
   const loadFiles = async (folderId = null) => {
     setLoadingFiles(true);
     try {
-      const data = await apiGetFiles(folderId);
-      setFiles(data);
+      setFiles(await apiGetFiles(folderId));
     } finally {
       setLoadingFiles(false);
     }
   };
 
-  // Initial load (My Drive)
   useEffect(() => {
     loadFolders(null);
     loadFiles(null);
   }, []);
 
   // -------------------------
-  // Create folder
+  // Folder actions
   // -------------------------
   const handleCreateFolder = async (name) => {
     await apiCreateFolder(name, currentFolder?.id || null);
     loadFolders(currentFolder?.id || null);
   };
 
-  // -------------------------
-  // Open folder
-  // -------------------------
   const handleOpenFolder = (folder) => {
     setCurrentFolder(folder);
-
-    setBreadcrumb((prev) => {
-      const index = prev.findIndex((f) => f.id === folder.id);
-      if (index !== -1) return prev.slice(0, index + 1);
-      return [...prev, folder];
-    });
-
+    setBreadcrumb((prev) => [...prev, folder]);
     loadFolders(folder.id);
     loadFiles(folder.id);
   };
 
-  // -------------------------
-  // Breadcrumb navigation
-  // -------------------------
   const handleBreadcrumbClick = (index) => {
     const path = breadcrumb.slice(0, index + 1);
     const target = path[path.length - 1];
@@ -92,9 +74,6 @@ export default function Dashboard() {
     loadFiles(target.id);
   };
 
-  // -------------------------
-  // Go root
-  // -------------------------
   const handleGoRoot = () => {
     setCurrentFolder(null);
     setBreadcrumb([]);
@@ -103,19 +82,17 @@ export default function Dashboard() {
   };
 
   // -------------------------
-  // PREVIEW (OLD, WORKING LOGIC) ✅
+  // FILE ACTIONS (FINAL, STABLE)
   // -------------------------
   const handlePreview = async (file) => {
-    const res = await apiDownloadFile(file.id);
-    window.open(res.download_url, "_blank", "noopener,noreferrer");
+    const blob = await apiDownloadFileBlob(file.id);
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // -------------------------
-  // DOWNLOAD (FORCE DOWNLOAD) ✅
-  // -------------------------
   const handleDownload = async (file) => {
     const blob = await apiDownloadFileBlob(file.id);
-    const url = window.URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
@@ -123,27 +100,30 @@ export default function Dashboard() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+
+    URL.revokeObjectURL(url);
   };
 
-  // Inject handlers into files
+  const handleDelete = async (file) => {
+    if (!window.confirm(`Delete "${file.name}"?`)) return;
+    await apiDeleteFile(file.id);
+    loadFiles(currentFolder?.id || null);
+  };
+
   const filesWithActions = files.map((f) => ({
     ...f,
-    onDownload: handleDownload,
     onPreview: handlePreview,
+    onDownload: handleDownload,
+    onDelete: handleDelete,
   }));
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
       <aside className="w-64 bg-white border-r p-4">
         <h2 className="text-xl font-bold mb-6">CloudVault</h2>
 
         <nav className="space-y-2 text-sm">
-          <div
-            className="font-medium cursor-pointer"
-            onClick={handleGoRoot}
-          >
+          <div className="font-medium cursor-pointer" onClick={handleGoRoot}>
             My Drive
           </div>
         </nav>
@@ -156,14 +136,9 @@ export default function Dashboard() {
         </button>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 p-6 overflow-auto">
-        {/* Breadcrumb */}
         <div className="text-sm text-gray-500 mb-4">
-          <span
-            className="cursor-pointer text-blue-600"
-            onClick={handleGoRoot}
-          >
+          <span className="cursor-pointer text-blue-600" onClick={handleGoRoot}>
             My Drive
           </span>
 
@@ -190,10 +165,7 @@ export default function Dashboard() {
         {loadingFolders ? (
           <div className="text-gray-500 mt-4">Loading folders…</div>
         ) : (
-          <FolderList
-            folders={folders}
-            onOpenFolder={handleOpenFolder}
-          />
+          <FolderList folders={folders} onOpenFolder={handleOpenFolder} />
         )}
 
         {loadingFiles ? (

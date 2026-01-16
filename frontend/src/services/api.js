@@ -22,14 +22,11 @@ export async function apiLogin(email, password) {
 }
 
 // --------------------
-// AUTHENTICATED FETCH (FIXED)
+// AUTHENTICATED FETCH (JSON)
 // --------------------
 export async function fetchWithAuth(endpoint, options = {}) {
   const token = getToken();
-
-  if (!token) {
-    throw new Error("No auth token found");
-  }
+  if (!token) throw new Error("No auth token found");
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -51,8 +48,7 @@ export async function fetchWithAuth(endpoint, options = {}) {
 // FOLDERS
 // --------------------
 export function apiGetFolders(parentId = null) {
-  const query =
-    parentId === null ? "" : `?parent_id=${parentId}`;
+  const query = parentId === null ? "" : `?parent_id=${parentId}`;
   return fetchWithAuth(`/folders${query}`);
 }
 
@@ -68,8 +64,7 @@ export function apiCreateFolder(name, parent_id = null) {
 // FILES
 // --------------------
 export function apiGetFiles(folder_id = null) {
-  const query =
-    folder_id === null ? "" : `?folder_id=${folder_id}`;
+  const query = folder_id === null ? "" : `?folder_id=${folder_id}`;
   return fetchWithAuth(`/files${query}`);
 }
 
@@ -77,36 +72,45 @@ export async function apiUploadFile(file, folder_id = null) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const query =
-    folder_id === null ? "" : `?folder_id=${folder_id}`;
+  const query = folder_id === null ? "" : `?folder_id=${folder_id}`;
 
-  return fetchWithAuth(`/files/upload${query}`, {
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}/files/upload${query}`, {
     method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     body: formData,
   });
+
+  if (!res.ok) throw new Error("Upload failed");
+  return res.json();
 }
+
 // --------------------
-// DOWNLOAD FILE
+// DOWNLOAD / PREVIEW (BLOB – CORRECT)
 // --------------------
-export async function apiDownloadFile(fileId) {
-  return fetchWithAuth(`/files/${fileId}/download`);
-}
 export async function apiDownloadFileBlob(fileId) {
-  const token = localStorage.getItem("token");
+  const token = getToken();
 
-  const response = await fetch(
-    `http://127.0.0.1:8000/files/${fileId}/download`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
+  const res = await fetch(`${API_BASE_URL}/files/${fileId}/download`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-  if (!response.ok) {
+  if (!res.ok) {
     throw new Error("Download failed");
   }
 
-  const blob = await response.blob();
-  return blob;
+  return res.blob();
+}
+
+// --------------------
+// DELETE FILE
+// --------------------
+export function apiDeleteFile(fileId) {
+  return fetchWithAuth(`/files/${fileId}`, {
+    method: "DELETE",
+  });
 }

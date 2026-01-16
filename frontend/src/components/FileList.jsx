@@ -1,5 +1,5 @@
 export default function FileList({ files }) {
-  if (!files || files.length === 0) {
+  if (!files.length) {
     return <div className="text-gray-500 mt-6">No files</div>;
   }
 
@@ -8,26 +8,30 @@ export default function FileList({ files }) {
       {files.map((file) => (
         <div
           key={file.id}
-          className="border p-3 rounded bg-white flex justify-between items-center"
+          className="border p-3 rounded bg-white"
         >
-          <div>
-            <div className="font-medium truncate">{file.name}</div>
-            <div className="text-xs text-gray-500">Uploaded file</div>
-          </div>
+          <div className="font-medium">{file.name}</div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 mt-2 text-sm">
             <button
               onClick={() => file.onPreview(file)}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-blue-600 hover:underline"
             >
               Preview
             </button>
 
             <button
               onClick={() => file.onDownload(file)}
-              className="text-sm text-green-600 hover:underline"
+              className="text-green-600 hover:underline"
             >
               Download
+            </button>
+
+            <button
+              onClick={() => file.onDelete(file)}
+              className="text-red-600 hover:underline"
+            >
+              Delete
             </button>
           </div>
         </div>
