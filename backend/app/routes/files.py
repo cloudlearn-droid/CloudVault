@@ -14,9 +14,6 @@ from app.models.file import File
 from app.models.user import User
 from app.schemas.file import FileOut
 
-# --------------------
-# Supabase
-# --------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -25,9 +22,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 router = APIRouter(prefix="/files", tags=["Files"])
 
 
-# --------------------
-# DB dependency
-# --------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -60,6 +54,25 @@ def get_files(
 
 
 # --------------------
+# GET TRASH FILES
+# --------------------
+@router.get("/trash", response_model=List[FileOut])
+def get_trash_files(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(File)
+        .filter(
+            File.owner_id == current_user.id,
+            File.is_deleted == True,
+        )
+        .order_by(File.created_at.desc())
+        .all()
+    )
+
+
+# --------------------
 # UPLOAD FILE
 # --------------------
 @router.post("/upload")
@@ -69,27 +82,21 @@ async def upload_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Invalid file")
-
     storage_path = f"{current_user.id}/{uuid4()}_{file.filename}"
-    file_bytes = await file.read()
+    data = await file.read()
 
-    res = supabase.storage.from_("files").upload(
+    supabase.storage.from_("files").upload(
         path=storage_path,
-        file=file_bytes,
+        file=data,
         file_options={"content-type": file.content_type},
     )
-
-    if isinstance(res, dict) and res.get("error"):
-        raise HTTPException(status_code=500, detail=res["error"]["message"])
 
     db_file = File(
         name=file.filename,
         owner_id=current_user.id,
         folder_id=folder_id,
         storage_path=storage_path,
-        size=len(file_bytes),
+        size=len(data),
         mime_type=file.content_type,
         is_uploaded=True,
     )
@@ -98,15 +105,11 @@ async def upload_file(
     db.commit()
     db.refresh(db_file)
 
-    return {
-        "id": db_file.id,
-        "name": db_file.name,
-        "storage_path": storage_path,
-    }
+    return {"id": db_file.id, "name": db_file.name}
 
 
 # --------------------
-# DOWNLOAD / PREVIEW FILE ✅ FIX
+# DOWNLOAD
 # --------------------
 @router.get("/{file_id}/download")
 def download_file(
@@ -123,24 +126,17 @@ def download_file(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Download file bytes from Supabase
-    res = supabase.storage.from_("files").download(file.storage_path)
-
-    if res is None:
-        raise HTTPException(
-            status_code=404, detail="File not found in storage")
+    data = supabase.storage.from_("files").download(file.storage_path)
 
     return StreamingResponse(
-        io.BytesIO(res),
+        io.BytesIO(data),
         media_type=file.mime_type,
-        headers={
-            "Content-Disposition": f'inline; filename="{file.name}"'
-        },
+        headers={"Content-Disposition": f'inline; filename="{file.name}"'},
     )
 
 
 # --------------------
-# DELETE FILE (SOFT DELETE)
+# SOFT DELETE
 # --------------------
 @router.delete("/{file_id}")
 def delete_file(
@@ -161,3 +157,55 @@ def delete_file(
     db.commit()
 
     return {"message": "File moved to trash"}
+
+
+# --------------------
+# RESTORE
+# --------------------
+@router.post("/{file_id}/restore")
+def restore_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.owner_id == current_user.id,
+        File.is_deleted == True,
+    ).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file.is_deleted = False
+    db.commit()
+
+    return {"message": "File restored"}
+
+
+# --------------------
+# PERMANENT DELETE ✅ NEW
+# --------------------
+@router.delete("/{file_id}/permanent")
+def permanent_delete_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.owner_id == current_user.id,
+    ).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # 1️⃣ Delete from Supabase storage (safe even if already missing)
+    if file.storage_path:
+        supabase.storage.from_("files").remove([file.storage_path])
+
+    # 2️⃣ Delete from DB explicitly
+    db.delete(file)
+    db.commit()
+
+    return {"message": "File permanently deleted"}
