@@ -1,17 +1,10 @@
-from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi import (
-    APIRouter,
-    Depends,
-    UploadFile,
-    File as FastFile,
-    HTTPException,
-    Query,           # ✅ REQUIRED IMPORT (THIS WAS MISSING)
-)
+from fastapi import APIRouter, Depends, UploadFile, File as FastFile, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import uuid4
 import os
+import io
 
 from supabase import create_client
 
@@ -21,15 +14,11 @@ from app.models.file import File
 from app.models.user import User
 from app.schemas.file import FileOut
 
-
 # --------------------
-# Supabase (SERVER SIDE)
+# Supabase
 # --------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-    raise RuntimeError("Supabase env vars missing")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -52,14 +41,10 @@ def get_db():
 # --------------------
 @router.get("", response_model=List[FileOut])
 def get_files(
-    folder_id: Optional[int] = Query(default=None),
+    folder_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Return uploaded files for logged-in user.
-    If folder_id is null → root files only
-    """
     query = db.query(File).filter(
         File.owner_id == current_user.id,
         File.is_deleted == False,
@@ -69,33 +54,25 @@ def get_files(
     if folder_id is not None:
         query = query.filter(File.folder_id == folder_id)
     else:
-        query = query.filter(File.folder_id == None)
+        query = query.filter(File.folder_id.is_(None))
 
     return query.order_by(File.created_at.desc()).all()
 
 
 # --------------------
-# UPLOAD FILE (Architecture B — FINAL)
+# UPLOAD FILE
 # --------------------
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = FastFile(...),
-    folder_id: Optional[int] = Query(default=None),
+    folder_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Upload flow:
-    1. Receive file from frontend
-    2. Upload to Supabase Storage (service role)
-    3. Save metadata in DB
-    """
-
     if not file.filename:
         raise HTTPException(status_code=400, detail="Invalid file")
 
     storage_path = f"{current_user.id}/{uuid4()}_{file.filename}"
-
     file_bytes = await file.read()
 
     res = supabase.storage.from_("files").upload(
@@ -128,41 +105,59 @@ async def upload_file(
     }
 
 
-# keep existing imports
-# keep existing router, supabase client, get_db, upload, list, etc.
-
-
+# --------------------
+# DOWNLOAD / PREVIEW FILE ✅ FIX
+# --------------------
 @router.get("/{file_id}/download")
 def download_file(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Generate a signed download URL for a file
-    """
-
     file = db.query(File).filter(
         File.id == file_id,
         File.owner_id == current_user.id,
         File.is_deleted == False,
-        File.is_uploaded == True,
     ).first()
 
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Signed URL valid for 5 minutes
-    res = supabase.storage.from_("files").create_signed_url(
-        file.storage_path,
-        expires_in=300,
+    # Download file bytes from Supabase
+    res = supabase.storage.from_("files").download(file.storage_path)
+
+    if res is None:
+        raise HTTPException(
+            status_code=404, detail="File not found in storage")
+
+    return StreamingResponse(
+        io.BytesIO(res),
+        media_type=file.mime_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{file.name}"'
+        },
     )
 
-    if not res or "signedURL" not in res:
-        raise HTTPException(
-            status_code=500, detail="Could not generate download URL")
 
-    return {
-        "download_url": res["signedURL"],
-        "filename": file.name,
-    }
+# --------------------
+# DELETE FILE (SOFT DELETE)
+# --------------------
+@router.delete("/{file_id}")
+def delete_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.owner_id == current_user.id,
+        File.is_deleted == False,
+    ).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file.is_deleted = True
+    db.commit()
+
+    return {"message": "File moved to trash"}
