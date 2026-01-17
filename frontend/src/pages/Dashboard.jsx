@@ -3,12 +3,16 @@ import { useAuth } from "../context/AuthContext";
 import {
   apiGetFolders,
   apiCreateFolder,
+  apiDeleteFolder,
+  apiRestoreFolder,
+  apiPermanentDeleteFolder,
   apiGetFiles,
   apiGetTrashFiles,
+  apiGetTrashFolders,
   apiRestoreFile,
+  apiPermanentDeleteFile,
   apiDownloadFileBlob,
   apiDeleteFile,
-  apiPermanentDeleteFile,
 } from "../services/api";
 
 import FolderList from "../components/FolderList";
@@ -25,10 +29,10 @@ export default function Dashboard() {
   const [breadcrumb, setBreadcrumb] = useState([]);
   const [loadingFolders, setLoadingFolders] = useState(true);
   const [loadingFiles, setLoadingFiles] = useState(true);
-  const [view, setView] = useState("drive"); // drive | trash
+  const [view, setView] = useState("drive");
 
   // -------------------------
-  // Load folders & files (ORIGINAL LOGIC RESTORED)
+  // Loaders
   // -------------------------
   const loadFolders = async (parentId = null) => {
     setLoadingFolders(true);
@@ -49,10 +53,21 @@ export default function Dashboard() {
   };
 
   const loadTrash = async () => {
+    setView("trash");
+    setCurrentFolder(null);
+    setBreadcrumb([]);
+    setLoadingFolders(true);
     setLoadingFiles(true);
+
     try {
-      setFiles(await apiGetTrashFiles());
+      const [trashFolders, trashFiles] = await Promise.all([
+        apiGetTrashFolders(),
+        apiGetTrashFiles(),
+      ]);
+      setFolders(trashFolders);
+      setFiles(trashFiles);
     } finally {
+      setLoadingFolders(false);
       setLoadingFiles(false);
     }
   };
@@ -63,7 +78,7 @@ export default function Dashboard() {
   }, []);
 
   // -------------------------
-  // Folder actions (UNCHANGED)
+  // Folder actions
   // -------------------------
   const handleCreateFolder = async (name) => {
     await apiCreateFolder(name, currentFolder?.id || null);
@@ -77,21 +92,28 @@ export default function Dashboard() {
     loadFiles(folder.id);
   };
 
-  const handleBreadcrumbClick = (index) => {
-    const path = breadcrumb.slice(0, index + 1);
-    const target = path[path.length - 1];
-
-    setBreadcrumb(path);
-    setCurrentFolder(target);
-    loadFolders(target.id);
-    loadFiles(target.id);
+  const handleDeleteFolder = async (folder) => {
+    if (!window.confirm(`Delete folder "${folder.name}"?`)) return;
+    await apiDeleteFolder(folder.id);
+    loadFolders(currentFolder?.id || null);
+    loadFiles(currentFolder?.id || null);
   };
 
-  const handleGoRoot = () => {
-    setCurrentFolder(null);
-    setBreadcrumb([]);
-    loadFolders(null);
-    loadFiles(null);
+  const handleRestoreFolder = async (folder) => {
+    await apiRestoreFolder(folder.id);
+    loadTrash();
+  };
+
+  const handlePermanentDeleteFolder = async (folder) => {
+    if (
+      !window.confirm(
+        `Permanently delete folder "${folder.name}" and all its contents?`
+      )
+    )
+      return;
+
+    await apiPermanentDeleteFolder(folder.id);
+    loadTrash();
   };
 
   // -------------------------
@@ -99,22 +121,15 @@ export default function Dashboard() {
   // -------------------------
   const handlePreview = async (file) => {
     const blob = await apiDownloadFileBlob(file.id);
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(URL.createObjectURL(blob), "_blank");
   };
 
   const handleDownload = async (file) => {
     const blob = await apiDownloadFileBlob(file.id);
-    const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = file.name;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);
   };
 
   const handleDelete = async (file) => {
@@ -129,7 +144,11 @@ export default function Dashboard() {
   };
 
   const handlePermanentDelete = async (file) => {
-    if (!window.confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) 
+    if (
+      !window.confirm(
+        `Permanently delete "${file.name}"? This cannot be undone.`
+      )
+    )
       return;
 
     await apiPermanentDeleteFile(file.id);
@@ -151,23 +170,15 @@ export default function Dashboard() {
         <h2 className="text-xl font-bold mb-6">CloudVault</h2>
 
         <nav className="space-y-2 text-sm">
-          <div
-            className="font-medium cursor-pointer"
-            onClick={() => {
-              setView("drive");
-              handleGoRoot();
-            }}
-          >
+          <div className="cursor-pointer" onClick={() => {
+            setView("drive");
+            loadFolders(null);
+            loadFiles(null);
+          }}>
             My Drive
           </div>
 
-          <div
-            className="font-medium cursor-pointer text-red-600"
-            onClick={() => {
-              setView("trash");
-              loadTrash();
-            }}
-          >
+          <div className="cursor-pointer text-red-600" onClick={loadTrash}>
             Trash
           </div>
         </nav>
@@ -183,49 +194,37 @@ export default function Dashboard() {
       <main className="flex-1 p-6 overflow-auto">
         {view === "drive" && (
           <>
-            <div className="text-sm text-gray-500 mb-4">
-              <span
-                className="cursor-pointer text-blue-600"
-                onClick={handleGoRoot}
-              >
-                My Drive
-              </span>
-
-              {breadcrumb.map((folder, index) => (
-                <span key={folder.id}>
-                  {" / "}
-                  <span
-                    className="cursor-pointer text-blue-600"
-                    onClick={() => handleBreadcrumbClick(index)}
-                  >
-                    {folder.name}
-                  </span>
-                </span>
-              ))}
-            </div>
-
             <CreateFolder onCreate={handleCreateFolder} />
-
             <FileUpload
               folderId={currentFolder?.id || null}
               onUploaded={() => loadFiles(currentFolder?.id || null)}
             />
 
-            {loadingFolders ? (
-              <div className="text-gray-500 mt-4">Loading folders…</div>
-            ) : (
-              <FolderList folders={folders} onOpenFolder={handleOpenFolder} />
+            {!loadingFolders && (
+              <FolderList
+                folders={folders}
+                onOpenFolder={handleOpenFolder}
+                onDeleteFolder={handleDeleteFolder}
+              />
             )}
           </>
         )}
 
-        {loadingFiles ? (
-          <div className="text-gray-500 mt-6">Loading files…</div>
-        ) : (
-          <FileList
-            files={filesWithActions}
-            isTrash={view === "trash"}
-          />
+        {view === "trash" && (
+          <>
+            {!loadingFolders && (
+              <FolderList
+                folders={folders}
+                isTrash={true}
+                onRestoreFolder={handleRestoreFolder}
+                onPermanentDeleteFolder={handlePermanentDeleteFolder}
+              />
+            )}
+          </>
+        )}
+
+        {!loadingFiles && (
+          <FileList files={filesWithActions} isTrash={view === "trash"} />
         )}
       </main>
     </div>

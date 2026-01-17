@@ -132,3 +132,36 @@ export function apiPermanentDeleteFile(id) {
     method: "DELETE",
   });
 }
+// --------------------
+// DELETE FOLDER
+// --------------------   
+export function apiDeleteFolder(folderId) {
+  return fetchWithAuth(`/folders/${folderId}`, {
+    method: "DELETE",
+  });
+}   
+
+// --------------------
+// RESTORE FOLDER
+// --------------------
+export function apiRestoreFolder(folderId) {
+  return fetchWithAuth(`/folders/${folderId}/restore`, {
+    method: "POST",
+  });
+}
+
+// --------------------
+// TRASHED FOLDERS
+// --------------------
+export function apiGetTrashFolders() {
+  return fetchWithAuth("/folders/trash");
+}
+
+// --------------------
+// Permanent Delete Folder
+// --------------------
+export function apiPermanentDeleteFolder(folderId) {
+  return fetchWithAuth(`/folders/${folderId}/permanent`, {
+    method: "DELETE",
+  });
+}
