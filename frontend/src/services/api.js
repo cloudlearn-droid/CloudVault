@@ -45,7 +45,7 @@ export async function fetchWithAuth(endpoint, options = {}) {
 }
 
 // --------------------
-// FOLDERS ✅ RESTORED
+// FOLDERS
 // --------------------
 export function apiGetFolders(parentId = null) {
   const query = parentId === null ? "" : `?parent_id=${parentId}`;
@@ -59,6 +59,40 @@ export function apiCreateFolder(name, parent_id = null) {
     body: JSON.stringify({ name, parent_id }),
   });
 }
+
+// ✅ NEW — Folder delete APIs
+export function apiDeleteFolder(folderId) {
+  return fetchWithAuth(`/folders/${folderId}`, {
+    method: "DELETE",
+  });
+}
+
+export function apiRestoreFolder(folderId) {
+  return fetchWithAuth(`/folders/${folderId}/restore`, {
+    method: "POST",
+  });
+}
+
+export function apiPermanentDeleteFolder(folderId) {
+  return fetchWithAuth(`/folders/${folderId}/permanent`, {
+    method: "DELETE",
+  });
+}
+
+export const apiRenameFolder = (id, name) =>
+  fetchWithAuth(`/folders/${id}/rename`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+
+export const apiMoveFolder = (id, parent_id) =>
+  fetchWithAuth(`/folders/${id}/move`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parent_id }),
+  });
+
 
 // --------------------
 // FILES
@@ -124,44 +158,23 @@ export function apiDeleteFile(fileId) {
     method: "DELETE",
   });
 }
-// --------------------
-// Permanent Delete File
-// --------------------
-export function apiPermanentDeleteFile(id) {  
+
+export function apiPermanentDeleteFile(id) {
   return fetchWithAuth(`/files/${id}/permanent`, {
     method: "DELETE",
   });
 }
-// --------------------
-// DELETE FOLDER
-// --------------------   
-export function apiDeleteFolder(folderId) {
-  return fetchWithAuth(`/folders/${folderId}`, {
-    method: "DELETE",
-  });
-}   
 
-// --------------------
-// RESTORE FOLDER
-// --------------------
-export function apiRestoreFolder(folderId) {
-  return fetchWithAuth(`/folders/${folderId}/restore`, {
-    method: "POST",
+export const apiRenameFile = (id, name) =>
+  fetchWithAuth(`/files/${id}/rename`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
   });
-}
 
-// --------------------
-// TRASHED FOLDERS
-// --------------------
-export function apiGetTrashFolders() {
-  return fetchWithAuth("/folders/trash");
-}
-
-// --------------------
-// Permanent Delete Folder
-// --------------------
-export function apiPermanentDeleteFolder(folderId) {
-  return fetchWithAuth(`/folders/${folderId}/permanent`, {
-    method: "DELETE",
+export const apiMoveFile = (id, folder_id) =>
+  fetchWithAuth(`/files/${id}/move`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder_id }),
   });
-}

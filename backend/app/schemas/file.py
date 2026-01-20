@@ -9,3 +9,11 @@ class FileOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class FileRename(BaseModel):
+    name: str
+
+
+class FileMove(BaseModel):
+    folder_id: Optional[int] = None

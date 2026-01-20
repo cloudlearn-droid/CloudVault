@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File as FastFile, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional, List
 from uuid import uuid4
 import os
@@ -11,8 +12,9 @@ from supabase import create_client
 from app.core.database import SessionLocal
 from app.core.deps import get_current_user
 from app.models.file import File
+from app.models.folder import Folder
 from app.models.user import User
-from app.schemas.file import FileOut
+from app.schemas.file import FileOut, FileRename, FileMove
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -54,18 +56,32 @@ def get_files(
 
 
 # --------------------
-# GET TRASH FILES
+# GET TRASH FILES ✅ FIXED
 # --------------------
 @router.get("/trash", response_model=List[FileOut])
 def get_trash_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Trash should show:
+    - Soft-deleted standalone files
+    - Soft-deleted files whose parent folder is NOT deleted
+
+    Trash should NOT show:
+    - Files inside soft-deleted folders
+    """
+
     return (
         db.query(File)
+        .outerjoin(Folder, File.folder_id == Folder.id)
         .filter(
             File.owner_id == current_user.id,
             File.is_deleted == True,
+            or_(
+                File.folder_id.is_(None),
+                Folder.is_deleted == False,
+            ),
         )
         .order_by(File.created_at.desc())
         .all()
@@ -184,7 +200,7 @@ def restore_file(
 
 
 # --------------------
-# PERMANENT DELETE ✅ NEW
+# PERMANENT DELETE
 # --------------------
 @router.delete("/{file_id}/permanent")
 def permanent_delete_file(
@@ -200,12 +216,78 @@ def permanent_delete_file(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # 1️⃣ Delete from Supabase storage (safe even if already missing)
     if file.storage_path:
         supabase.storage.from_("files").remove([file.storage_path])
 
-    # 2️⃣ Delete from DB explicitly
     db.delete(file)
     db.commit()
 
     return {"message": "File permanently deleted"}
+
+
+# -------------------------
+# RENAME
+# -------------------------
+@router.patch("/{file_id}/rename")
+def rename_file(
+    file_id: int,
+    data: FileRename,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.owner_id == current_user.id,
+        File.is_deleted == False,
+    ).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    dup = db.query(File).filter(
+        File.owner_id == current_user.id,
+        File.folder_id == file.folder_id,
+        File.name == data.name,
+        File.id != file.id,
+        File.is_deleted == False,
+    ).first()
+
+    if dup:
+        raise HTTPException(status_code=400, detail="File name already exists")
+
+    file.name = data.name
+    db.commit()
+    return {"message": "File renamed"}
+
+
+# -------------------------
+# MOVE
+# -------------------------
+@router.patch("/{file_id}/move")
+def move_file(
+    file_id: int,
+    data: FileMove,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file = db.query(File).filter(
+        File.id == file_id,
+        File.owner_id == current_user.id,
+        File.is_deleted == False,
+    ).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if data.folder_id is not None:
+        folder = db.query(Folder).filter(
+            Folder.id == data.folder_id,
+            Folder.owner_id == current_user.id,
+            Folder.is_deleted == False,
+        ).first()
+        if not folder:
+            raise HTTPException(status_code=400, detail="Invalid destination")
+
+    file.folder_id = data.folder_id
+    db.commit()
+    return {"message": "File moved"}

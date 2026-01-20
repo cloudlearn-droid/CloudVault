@@ -1,33 +1,47 @@
 import { useState } from "react";
 
-export default function FileList({ files, isTrash }) {
+export default function FolderList({
+  folders,
+  onOpenFolder,
+  onDeleteFolder,
+  onRestoreFolder,
+  onPermanentDeleteFolder,
+  onRenameFolder,
+  onMoveFolder,
+  isTrash = false,
+}) {
   const [menuId, setMenuId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
 
   return (
-    <div className="grid grid-cols-3 gap-4 mt-6">
-      {files.map((f) => (
-        <div key={f.id} className="relative border p-3 rounded bg-white">
+    <div className="grid grid-cols-4 gap-4 mt-4">
+      {folders.map((f) => (
+        <div key={f.id} className="relative border p-4 rounded bg-white">
           {editingId === f.id ? (
             <input
               value={name}
               autoFocus
               onChange={(e) => setName(e.target.value)}
               onBlur={() => {
-                f.onRename(name);
+                onRenameFolder(f, name);
                 setEditingId(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  f.onRename(name);
+                  onRenameFolder(f, name);
                   setEditingId(null);
                 }
               }}
               className="border px-2 py-1 w-full"
             />
           ) : (
-            <div className="truncate">{f.name}</div>
+            <div
+              className={!isTrash ? "cursor-pointer" : ""}
+              onClick={() => !isTrash && onOpenFolder(f)}
+            >
+              📁 {f.name}
+            </div>
           )}
 
           <button
@@ -41,12 +55,6 @@ export default function FileList({ files, isTrash }) {
             <div className="absolute right-2 top-8 bg-white border shadow w-44 z-20">
               {!isTrash && (
                 <>
-                  <button className="menu-btn" onClick={f.onPreview}>
-                    Preview
-                  </button>
-                  <button className="menu-btn" onClick={f.onDownload}>
-                    Download
-                  </button>
                   <button
                     className="menu-btn"
                     onClick={() => {
@@ -57,10 +65,24 @@ export default function FileList({ files, isTrash }) {
                   >
                     Rename
                   </button>
-                  <button className="menu-btn" onClick={f.onMove}>
+
+                  <button
+                    className="menu-btn"
+                    onClick={() => {
+                      onMoveFolder(f);
+                      setMenuId(null);
+                    }}
+                  >
                     Move
                   </button>
-                  <button className="menu-btn text-red-600" onClick={f.onDelete}>
+
+                  <button
+                    className="menu-btn text-red-600"
+                    onClick={() => {
+                      onDeleteFolder(f);
+                      setMenuId(null);
+                    }}
+                  >
                     Delete
                   </button>
                 </>
@@ -68,12 +90,12 @@ export default function FileList({ files, isTrash }) {
 
               {isTrash && (
                 <>
-                  <button className="menu-btn" onClick={f.onRestore}>
+                  <button className="menu-btn" onClick={() => onRestoreFolder(f)}>
                     Restore
                   </button>
                   <button
                     className="menu-btn text-red-600"
-                    onClick={f.onPermanentDelete}
+                    onClick={() => onPermanentDeleteFolder(f)}
                   >
                     Delete permanently
                   </button>

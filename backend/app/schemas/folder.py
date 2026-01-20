@@ -5,3 +5,11 @@ from typing import Optional
 class FolderCreate(BaseModel):
     name: str
     parent_id: Optional[int] = None
+
+
+class FolderRename(BaseModel):
+    name: str
+
+
+class FolderMove(BaseModel):
+    parent_id: Optional[int] = None
