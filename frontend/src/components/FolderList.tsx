@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export default function FolderList({
   folders,
@@ -10,14 +10,32 @@ export default function FolderList({
   onMoveFolder,
   isTrash = false,
 }) {
-  const [menuId, setMenuId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
+  const [menuId, setMenuId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ Close menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <div className="grid grid-cols-4 gap-4 mt-4">
       {folders.map((f) => (
-        <div key={f.id} className="relative border p-4 rounded bg-white">
+        <div
+          key={f.id}
+          className={`relative border p-4 rounded bg-white transition
+            hover:shadow-md hover:-translate-y-[1px]
+            ${menuId === f.id ? "z-20" : ""}
+          `}
+        >
           {editingId === f.id ? (
             <input
               value={name}
@@ -33,11 +51,11 @@ export default function FolderList({
                   setEditingId(null);
                 }
               }}
-              className="border px-2 py-1 w-full"
+              className="border px-2 py-1 w-full rounded"
             />
           ) : (
             <div
-              className={!isTrash ? "cursor-pointer" : ""}
+              className={!isTrash ? "cursor-pointer select-none" : ""}
               onClick={() => !isTrash && onOpenFolder(f)}
             >
               📁 {f.name}
@@ -46,15 +64,32 @@ export default function FolderList({
 
           <button
             className="absolute top-2 right-2"
-            onClick={() => setMenuId(menuId === f.id ? null : f.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuId(menuId === f.id ? null : f.id);
+            }}
           >
             ⋮
           </button>
 
           {menuId === f.id && (
-            <div className="absolute right-2 top-8 bg-white border shadow w-44 z-20">
+            <div
+              ref={menuRef}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-2 top-8 bg-white border shadow-lg w-44 z-50 rounded flex flex-col"
+            >
               {!isTrash && (
                 <>
+                  <button
+                    className="menu-btn"
+                    onClick={() => {
+                      onMoveFolder(f);
+                      setMenuId(null);
+                    }}
+                  >
+                    Move
+                  </button>
+
                   <button
                     className="menu-btn"
                     onClick={() => {
@@ -64,16 +99,6 @@ export default function FolderList({
                     }}
                   >
                     Rename
-                  </button>
-
-                  <button
-                    className="menu-btn"
-                    onClick={() => {
-                      onMoveFolder(f);
-                      setMenuId(null);
-                    }}
-                  >
-                    Move
                   </button>
 
                   <button
@@ -90,7 +115,10 @@ export default function FolderList({
 
               {isTrash && (
                 <>
-                  <button className="menu-btn" onClick={() => onRestoreFolder(f)}>
+                  <button
+                    className="menu-btn"
+                    onClick={() => onRestoreFolder(f)}
+                  >
                     Restore
                   </button>
                   <button

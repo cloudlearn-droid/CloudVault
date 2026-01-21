@@ -1,20 +1,26 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-export default function Login({ onSwitchToSignup }) {
-  const { login, loading } = useAuth();
+export default function Signup({ onSwitchToLogin }) {
+  const { signup, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
     try {
-      await login(email, password);
+      await signup(email, password);
     } catch (err) {
-      setError("Invalid email or password");
+      setError(err.message || "Signup failed");
     }
   };
 
@@ -28,7 +34,7 @@ export default function Login({ onSwitchToSignup }) {
           CloudVault
         </h1>
         <p className="text-center text-sm text-gray-500 mb-6">
-          Sign in to your account
+          Create a new account
         </p>
 
         {error && (
@@ -50,7 +56,7 @@ export default function Login({ onSwitchToSignup }) {
           />
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm font-medium mb-1">
             Password
           </label>
@@ -63,22 +69,35 @@ export default function Login({ onSwitchToSignup }) {
           />
         </div>
 
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-1">
+            Confirm Password
+          </label>
+          <input
+            type="password"
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
+        </div>
+
         <button
           type="submit"
           disabled={loading}
           className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
         >
-          {loading ? "Signing in..." : "Sign In"}
+          {loading ? "Creating account..." : "Sign Up"}
         </button>
 
         <div className="text-center text-sm text-gray-500 mt-6">
-          Don’t have an account?{" "}
+          Already have an account?{" "}
           <button
             type="button"
-            onClick={onSwitchToSignup}
+            onClick={onSwitchToLogin}
             className="text-blue-600 hover:underline"
           >
-            Create one
+            Sign in
           </button>
         </div>
       </form>

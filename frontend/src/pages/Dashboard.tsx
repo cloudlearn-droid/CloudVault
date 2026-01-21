@@ -8,15 +8,10 @@ import {
   apiPermanentDeleteFolder,
   apiGetFiles,
   apiGetTrashFiles,
-  apiGetTrashFolders,
   apiRestoreFile,
-  apiPermanentDeleteFile,
   apiDownloadFileBlob,
   apiDeleteFile,
   apiPermanentDeleteFile,
-  apiDeleteFolder,
-  apiRestoreFolder,
-  apiPermanentDeleteFolder,
   apiMoveFile,
   apiRenameFolder,
   apiMoveFolder,
@@ -37,25 +32,19 @@ export default function Dashboard() {
   const [files, setFiles] = useState([]);
   const [currentFolder, setCurrentFolder] = useState(null);
   const [breadcrumb, setBreadcrumb] = useState([]);
-  const [view, setView] = useState("drive");
+  const [view, setView] = useState<"drive" | "trash">("drive");
 
-  // ✅ Move modal state
   const [moveModal, setMoveModal] = useState({
     open: false,
-    type: null, // "folder" | "file"
-    item: null,
+    type: null as "folder" | "file" | null,
+    item: null as any,
   });
 
-  // -------------------------
-  // Load helpers (UNCHANGED)
-  // -------------------------
-  const loadFolders = async (parentId = null) => {
+  const loadFolders = async (parentId = null) =>
     setFolders(await apiGetFolders(parentId));
-  };
 
-  const loadFiles = async (folderId = null) => {
+  const loadFiles = async (folderId = null) =>
     setFiles(await apiGetFiles(folderId));
-  };
 
   const loadTrash = async () => {
     setFolders(await fetchWithAuth("/folders/trash"));
@@ -67,9 +56,6 @@ export default function Dashboard() {
     loadFiles(null);
   }, []);
 
-  // -------------------------
-  // Folder navigation (UNCHANGED)
-  // -------------------------
   const handleOpenFolder = (folder) => {
     setCurrentFolder(folder);
     setBreadcrumb((prev) => [...prev, folder]);
@@ -80,7 +66,6 @@ export default function Dashboard() {
   const handleBreadcrumbClick = (index) => {
     const path = breadcrumb.slice(0, index + 1);
     const target = path[path.length - 1] || null;
-
     setBreadcrumb(path);
     setCurrentFolder(target);
     loadFolders(target?.id || null);
@@ -94,52 +79,12 @@ export default function Dashboard() {
     loadFiles(null);
   };
 
-  // -------------------------
-  // Folder actions
-  // -------------------------
-  const handleCreateFolder = async (name) => {
-    await apiCreateFolder(name, currentFolder?.id || null);
-    loadFolders(currentFolder?.id || null);
-  };
-
-  const handleDeleteFolder = async (folder) => {
-    if (!window.confirm(`Delete folder "${folder.name}"?`)) return;
-    await apiDeleteFolder(folder.id);
-    loadFolders(currentFolder?.id || null);
-  };
-
-  const handleRestoreFolder = async (folder) => {
-    await apiRestoreFolder(folder.id);
-    loadTrash();
-  };
-
-  const handlePermanentDeleteFolder = async (folder) => {
-    if (!window.confirm(`Permanently delete "${folder.name}"?`)) return;
-    await apiPermanentDeleteFolder(folder.id);
-    loadTrash();
-  };
-
-  const handleRenameFolder = async (folder, newName) => {
-    if (!newName || newName === folder.name) return;
-    await apiRenameFolder(folder.id, newName);
-    loadFolders(currentFolder?.id || null);
-  };
-
-  const handleMoveFolder = (folder) => {
-    setMoveModal({ open: true, type: "folder", item: folder });
-  };
-
-  // -------------------------
-  // File actions
-  // -------------------------
   const filesWithActions = files.map((f) => ({
     ...f,
-
     onPreview: async () => {
       const blob = await apiDownloadFileBlob(f.id);
       window.open(URL.createObjectURL(blob));
     },
-
     onDownload: async () => {
       const blob = await apiDownloadFileBlob(f.id);
       const a = document.createElement("a");
@@ -147,53 +92,30 @@ export default function Dashboard() {
       a.download = f.name;
       a.click();
     },
-
     onDelete: async () => {
       if (!window.confirm(`Delete "${f.name}"?`)) return;
       await apiDeleteFile(f.id);
       loadFiles(currentFolder?.id || null);
     },
-
     onRestore: async () => {
       await apiRestoreFile(f.id);
       loadTrash();
     },
-
     onPermanentDelete: async () => {
       if (!window.confirm(`Permanently delete "${f.name}"?`)) return;
       await apiPermanentDeleteFile(f.id);
       loadTrash();
     },
-
     onRename: async (newName) => {
       if (!newName || newName === f.name) return;
       await apiRenameFile(f.id, newName);
       loadFiles(currentFolder?.id || null);
     },
-
-    onMove: () => {
-      setMoveModal({ open: true, type: "file", item: f });
-    },
+    onMove: () => setMoveModal({ open: true, type: "file", item: f }),
   }));
 
-  // -------------------------
-  // Move confirm handler
-  // -------------------------
-  const handleConfirmMove = async (targetFolderId) => {
-    const { type, item } = moveModal;
-
-    if (type === "folder") {
-      await apiMoveFolder(item.id, targetFolderId);
-      loadFolders(currentFolder?.id || null);
-    }
-
-    if (type === "file") {
-      await apiMoveFile(item.id, targetFolderId);
-      loadFiles(currentFolder?.id || null);
-    }
-
-    setMoveModal({ open: false, type: null, item: null });
-  };
+  const isEmpty =
+    folders.length === 0 && files.length === 0;
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -201,15 +123,27 @@ export default function Dashboard() {
         <h2 className="text-xl font-bold mb-6">CloudVault</h2>
 
         <nav className="space-y-2 text-sm">
-          <div className="cursor-pointer" onClick={() => {
-            setView("drive");
-            loadFolders(null);
-            loadFiles(null);
-          }}>
+          <div
+            className={`cursor-pointer px-2 py-1 rounded transition ${
+              view === "drive" ? "bg-blue-100 text-blue-700" : ""
+            }`}
+            onClick={() => {
+              setView("drive");
+              handleGoRoot();
+            }}
+          >
             My Drive
           </div>
 
-          <div className="cursor-pointer text-red-600" onClick={loadTrash}>
+          <div
+            className={`cursor-pointer px-2 py-1 rounded transition ${
+              view === "trash" ? "bg-red-100 text-red-700" : "text-red-600"
+            }`}
+            onClick={() => {
+              setView("trash");
+              loadTrash();
+            }}
+          >
             Trash
           </div>
         </nav>
@@ -225,18 +159,18 @@ export default function Dashboard() {
       <main className="flex-1 p-6 overflow-auto">
         {view === "drive" && (
           <>
-<<<<<<< HEAD
-=======
-            <div className="text-sm text-gray-500 mb-4">
-              <span className="cursor-pointer text-blue-600" onClick={handleGoRoot}>
+            <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
+              <span
+                className="cursor-pointer text-blue-600 hover:underline"
+                onClick={handleGoRoot}
+              >
                 My Drive
               </span>
-
               {breadcrumb.map((folder, index) => (
-                <span key={folder.id}>
-                  {" / "}
+                <span key={folder.id} className="flex items-center gap-2">
+                  <span className="text-gray-400">›</span>
                   <span
-                    className="cursor-pointer text-blue-600"
+                    className="cursor-pointer text-blue-600 hover:underline"
                     onClick={() => handleBreadcrumbClick(index)}
                   >
                     {folder.name}
@@ -245,43 +179,94 @@ export default function Dashboard() {
               ))}
             </div>
 
->>>>>>> 8832681 (backup: stable Folder File move, rename, preview, Delete (Soft) and Permanent Delete)
-            <CreateFolder onCreate={handleCreateFolder} />
+            <CreateFolder onCreate={async (name) => {
+              await apiCreateFolder(name, currentFolder?.id || null);
+              loadFolders(currentFolder?.id || null);
+            }} />
+
             <FileUpload
               folderId={currentFolder?.id || null}
               onUploaded={() => loadFiles(currentFolder?.id || null)}
             />
 
-            <FolderList
-              folders={folders}
-              onOpenFolder={handleOpenFolder}
-              onDeleteFolder={handleDeleteFolder}
-              onRenameFolder={handleRenameFolder}
-              onMoveFolder={handleMoveFolder}
-            />
+            {isEmpty ? (
+              <div className="text-center text-gray-500 mt-20">
+                📂 <br />
+                This folder is empty<br />
+                Upload files or create a folder
+              </div>
+            ) : (
+              <>
+                <FolderList
+                  folders={folders}
+                  onOpenFolder={handleOpenFolder}
+                  onDeleteFolder={async (f) => {
+                    await apiDeleteFolder(f.id);
+                    loadFolders(currentFolder?.id || null);
+                  }}
+                  onRenameFolder={async (f, n) => {
+                    await apiRenameFolder(f.id, n);
+                    loadFolders(currentFolder?.id || null);
+                  }}
+                  onMoveFolder={(f) =>
+                    setMoveModal({ open: true, type: "folder", item: f })
+                  }
+                />
+
+                <FileList files={filesWithActions} isTrash={false} />
+              </>
+            )}
           </>
         )}
 
         {view === "trash" && (
-          <FolderList
-            folders={folders}
-            isTrash
-            onRestoreFolder={handleRestoreFolder}
-            onPermanentDeleteFolder={handlePermanentDeleteFolder}
-          />
-        )}
+          <>
+            {isEmpty ? (
+              <div className="text-center text-gray-500 mt-20">
+                🗑️ <br />
+                Trash is empty
+              </div>
+            ) : (
+              <>
+                <FolderList
+                  folders={folders}
+                  isTrash
+                  onRestoreFolder={async (f) => {
+                    await apiRestoreFolder(f.id);
+                    loadTrash();
+                  }}
+                  onPermanentDeleteFolder={async (f) => {
+                    await apiPermanentDeleteFolder(f.id);
+                    loadTrash();
+                  }}
+                />
 
-        <FileList files={filesWithActions} isTrash={view === "trash"} />
+                <FileList files={filesWithActions} isTrash />
+              </>
+            )}
+          </>
+        )}
       </main>
 
-      {/* ✅ MOVE MODAL */}
       <MoveModal
         open={moveModal.open}
         title={`Move ${moveModal.type}`}
         folders={folders}
         currentId={moveModal.item?.id}
-        onClose={() => setMoveModal({ open: false, type: null, item: null })}
-        onConfirm={handleConfirmMove}
+        onClose={() =>
+          setMoveModal({ open: false, type: null, item: null })
+        }
+        onConfirm={async (targetFolderId) => {
+          if (moveModal.type === "folder") {
+            await apiMoveFolder(moveModal.item.id, targetFolderId);
+            loadFolders(currentFolder?.id || null);
+          }
+          if (moveModal.type === "file") {
+            await apiMoveFile(moveModal.item.id, targetFolderId);
+            loadFiles(currentFolder?.id || null);
+          }
+          setMoveModal({ open: false, type: null, item: null });
+        }}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import { apiLogin } from "../services/api";
+import { apiLogin, apiRegister } from "../services/api";
 
 const AuthContext = createContext(null);
 
@@ -20,6 +20,17 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const signup = async (email, password) => {
+    setLoading(true);
+    try {
+      const data = await apiRegister(email, password);
+      localStorage.setItem("token", data.access_token);
+      setToken(data.access_token);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("token");
     setToken(null);
@@ -31,6 +42,7 @@ export function AuthProvider({ children }) {
         token,
         isAuthenticated: !!token,
         login,
+        signup,
         logout,
         loading,
       }}

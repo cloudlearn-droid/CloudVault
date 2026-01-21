@@ -21,6 +21,21 @@ export async function apiLogin(email, password) {
   return response.json();
 }
 
+export async function apiRegister(email, password) {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Registration failed");
+  }
+
+  return response.json();
+}
+
 // --------------------
 // AUTHENTICATED FETCH
 // --------------------
