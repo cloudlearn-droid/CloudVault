@@ -3,6 +3,9 @@ services:
     name: cloudvault-backend
     env: python
     plan: free
+
+    pythonVersion: 3.11
+
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
     autoDeploy: true
