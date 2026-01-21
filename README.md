@@ -219,3 +219,11 @@ CloudVault demonstrates:
 This project is built the way **production systems are built**, not just to look good.
 
 If you’re reviewing this repository — thank you for your time 🙌
+
+Release: v1.0.0-mvp
+Stable MVP before deployment
+
+## Dependency Management
+
+- Backend dependencies are frozen using `pip freeze`
+- Frontend dependencies are locked via `package-lock.json`
